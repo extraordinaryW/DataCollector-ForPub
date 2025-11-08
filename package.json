@@ -1,0 +1,22 @@
+{
+  "name": "client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "electron": "electron electron/main.js",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "naive-ui": "^2.43.1",
+    "vue": "^3.5.22",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "electron": "^38.2.2",
+    "vite": "^7.1.7"
+  }
+}
