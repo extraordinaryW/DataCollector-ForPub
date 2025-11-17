@@ -23,8 +23,8 @@
         <label><input type="radio" value="bilibili" v-model="platform" /> B站</label>
       </div>
 
-      <label>要查的用户名称 </label>
-      <input v-model="authorNamesInput" placeholder="输入您要查询的用户名称" />
+      <label>用户名称列表（每行用\n或逗号分隔，最多100个） </label>
+      <textarea v-model="authorNamesInput" rows="4" placeholder="用户名A\n用户名B"></textarea>
 
       <label>limit（每页上限，≤2000）</label>
       <input type="number" v-model.number="limit" min="1" max="2000" placeholder="100" />
@@ -44,6 +44,10 @@
       <div class="result-meta">
         <span>返回 {{ results.length }}条</span>
         <!-- <n-ellipsis v-if="returnedScrollId">scroll_id：{{ returnedScrollId }}</n-ellipsis> -->
+        <span>最大粉丝数过滤：</span>
+        <n-space>
+          <n-switch v-model:value="maxFollowersFilter" />
+        </n-space>
       </div>
       <n-data-table
         :bordered="false"
@@ -60,9 +64,9 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed } from 'vue'
+import { ref, shallowRef, computed,watch } from 'vue'
 import { exportJsonToExcel } from '@/utils/exportExcel'
-import { NDataTable } from 'naive-ui'
+import { NDataTable, NSpace, NSwitch } from 'naive-ui'
 import { createUserColumns } from '@/columns/findByUserColumns'
 import { getUserHeaderMap } from '@/columns/findByUserHeaderMap'
 const emit = defineEmits(['close'])
@@ -79,9 +83,18 @@ const loading = ref(false)
 const fileLoading = ref(false)
 const errorMessage = ref('')
 const results = shallowRef([])
+const rawResults = shallowRef([])
+const rawMaxFollowers = ref([])
 const returnedScrollId = ref('')
 
 const fileImport = ref(null)
+
+const parsedAuthorNames = computed(() => parseList(authorNamesInput.value))
+const maxFollowersFilter = ref(false)
+
+watch(maxFollowersFilter, (enabled) => {
+  results.value = enabled ? rawMaxFollowers.value : rawResults.value
+})
 
 // 页面中的表格数据
 const columns = computed(() => createUserColumns(platform.value))
@@ -133,10 +146,26 @@ async function handleFileImport(event) {
   }
 }
 
+function parseList(raw) {
+  // 支持按行或逗号分隔，自动去重与去空白
+  const items = raw
+    .split(/\r?\n|,/)
+    .map(s => s.trim())
+    .filter(Boolean)
+  const seen = new Set()
+  const unique = []
+  for (const v of items) {
+    if (!seen.has(v)) {
+      seen.add(v)
+      unique.push(v)
+    }
+  }
+  return unique.slice(0, 100) // 限制最多100个
+}
+
 function buildParams(isNextPage = false) {
   const params = new URLSearchParams()
-
-  params.set('author_name', authorNamesInput.value)
+  params.set('author_names', parsedAuthorNames.value.join(','))
   params.set('api_key', apiKey.value)
   params.set('limit', String(Number(limit.value) || 100))
   
@@ -173,6 +202,7 @@ async function nextPage() {
 }
 
 function validateParams(isNextPage = false) {
+  if (parsedAuthorNames.value.length === 0) return '请至少填写一个用户名称'
   // 翻页请求：只需要 scroll_id 与必要上下文参数
   if (!finalEndpointUrl.value) return '请填写对应平台的后端接口地址'
   if (!apiKey.value) return '请填写 api_key'
@@ -205,7 +235,10 @@ async function doRequest(params) {
     const data = await resp.json()
     // 约定后端返回：{ data: [...], scroll_id: '...', total?: number }
     const list = Array.isArray(data?.data?.data) ? data.data.data : []
-    results.value = list.map(r => Object.freeze({...r}))
+    const maxFollowersList = Array.isArray(data?.data?.max_followers) ? data.data.max_followers : []
+    rawResults.value = list.map(r => Object.freeze({...r}))
+    rawMaxFollowers.value = maxFollowersList.map(r => Object.freeze({...r}))
+    results.value = maxFollowersFilter.value ? rawMaxFollowers.value : rawResults.value
     returnedScrollId.value = data?.data?.scroll_id || ''
   } catch (e) {
     errorMessage.value = e?.message || String(e)
@@ -215,8 +248,10 @@ async function doRequest(params) {
 }
 
 function resetAll() {
-  results.value = []
   returnedScrollId.value = ''
+  rawResults.value = []
+  rawMaxFollowers.value = []
+  results.value = []
 }
 
 function downloadExcel() {
@@ -253,6 +288,7 @@ function downloadExcel() {
   grid-template-columns: 180px 1fr;
   gap:10px 12px;
   align-items: center;
+  margin-right: 8px;
 }
 .form-grid input[type="text"],
 .form-grid input[type="date"],

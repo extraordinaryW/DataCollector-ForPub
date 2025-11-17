@@ -3,7 +3,7 @@ defineProps({
   msg: String,
 })
 
-const emit = defineEmits(['open-find-by-author', 'open-find-by-user'])
+const emit = defineEmits(['open-find-by-author', 'open-find-by-user', 'open-find-by-keywords'])
 
 function openFindByAuthor() {
   emit('open-find-by-author')
@@ -11,6 +11,10 @@ function openFindByAuthor() {
 
 function openFindByUser() {
   emit('open-find-by-user')
+}
+
+function openFindByKeywords() {
+  emit('open-find-by-keywords')
 }
 </script>
 
@@ -20,6 +24,7 @@ function openFindByUser() {
   <div class="demand">
     <button type="button" @click="openFindByAuthor">根据作者查询</button>
     <button style="margin-left: 20px;" type="button" @click="openFindByUser">根据用户查询</button>
+    <button style="margin-left: 20px;" type="button" @click="openFindByKeywords">根据关键词查询</button>
   </div>
 </template>
 

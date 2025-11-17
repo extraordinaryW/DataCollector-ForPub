@@ -24,15 +24,22 @@
       </div>
       <label>输入模式</label>
       <div class="seg">
+        <label><input type="radio" value="none" v-model="inputMode" /> 置空</label>
         <label><input type="radio" value="ids" v-model="inputMode" /> 按用户ID</label>
         <label><input type="radio" value="names" v-model="inputMode" /> 按用户名称</label>
       </div>
 
-      <label v-if="inputMode==='ids'">用户ID列表（每行用\n或逗号分隔，最多100个）</label>
+      <label v-if="inputMode==='ids' && inputMode !== 'none'">用户ID列表（每行用\n或逗号分隔，最多100个）</label>
       <textarea v-if="inputMode==='ids'" v-model="authorIdsInput" rows="4" placeholder="2803301701\n2803301702"></textarea>
 
-      <label v-if="inputMode==='names'">用户名称列表（每行用\n或逗号分隔，最多100个）</label>
+      <label v-if="inputMode==='names' && inputMode !== 'none'">用户名称列表（每行用\n或逗号分隔，最多100个）</label>
       <textarea v-if="inputMode==='names'" v-model="authorNamesInput" rows="4" placeholder="用户名A\n用户名B"></textarea>
+
+      <label>关键词列表（每行用\n或逗号分隔）</label>
+      <textarea v-model="keywordsInput" rows="4" placeholder="歌手2025\n歌手2024"></textarea>
+
+      <label>屏蔽词列表（每行用\n或逗号分隔）</label>
+      <textarea v-model="blockedWordsInput" rows="4" placeholder="女歌手2025\n男歌手2025"></textarea>
 
       <label>开始日期 start_date</label>
       <input type="date" v-model="startDate" />
@@ -43,8 +50,37 @@
       <label>limit（每页上限，≤2000）</label>
       <input type="number" v-model.number="limit" min="1" max="2000" />
 
-      <label>turbo（深度检索）</label>
-      <input type="checkbox" v-model="turbo" />
+      <label>主贴<b>排序字段</b></label>
+      <div class="seg">
+        <label><input type="radio" value="interaction" v-model="sort" />互动量</label>
+        <label><input type="radio" value="publish_time" v-model="sort" />发布时间</label>
+      </div>
+
+      <label>主贴<b>排序顺序</b></label>
+      <div class="seg">
+        <label><input type="radio" value="asc" v-model="sortOrder" />升序</label>
+        <label><input type="radio" value="desc" v-model="sortOrder" />降序</label>
+      </div>
+
+      <label>情感类型</label>
+      <div class="seg">
+        <label><input type="radio" value="1" v-model="sentiment" />正面</label>
+        <label><input type="radio" value="0" v-model="sentiment" />中性</label>
+        <label><input type="radio" value="-1" v-model="sentiment" />负面</label>
+      </div>
+
+      <label>主贴类型</label>
+      <div class="seg">
+        <label><input type="checkbox" value="video" v-model="postType" />视频</label>
+        <label><input type="checkbox" value="image" v-model="postType" />图文</label>
+      </div>
+
+      <label>是否为广告贴</label>
+      <div class="seg">
+        <label><input type="radio" value="0" v-model="isAd" />不是广告</label>
+        <label><input type="radio" value="1" v-model="isAd" />是广告</label>
+        <label><input type="radio" value="2" v-model="isAd" />非常规视频（如直播切片）</label>
+      </div>
     </div>
 
     <div class="actions">
@@ -83,20 +119,27 @@
 import { ref, shallowRef, computed } from 'vue'
 import { exportJsonToExcel } from '@/utils/exportExcel'
 import { NDataTable } from 'naive-ui'
-import { createAuthorColumns } from '@/columns/findByAuthorColumns'
-import { getAuthorHeaderMap } from '@/columns/findByAuthorHeaderMap'
+import { createKeywordsColumns } from '@/columns/findByKeywordsColumns'
+import { getKeywordsHeaderMap } from '@/columns/findByKeywordsHeaderMap'
 const emit = defineEmits(['close'])
 
 // 表单状态
 const platform = ref('douyin') // 'douyin' | 'bilibili'
-const douyinEndpointUrl = ref(import.meta.env.VITE_DOUYIN_AUTHOR_API_BASE)
-const biliEndpointUrl = ref(import.meta.env.VITE_BILIBILI_AUTHOR_API_BASE) 
+const sort = ref('interaction') // 'interaction' | 'publish_time'
+const sortOrder = ref('desc') // 'asc' | 'desc'
+const sentiment = ref('1') // 1: 正面, 0: 中性, -1: 负面
+const postType = ref(['video']) // 'video' | 'image'
+const isAd = ref('0') // 0: 不是广告, 1: 是广告, 2: 非常规视频（如直播切片）
+const douyinEndpointUrl = ref(import.meta.env.VITE_DOUYIN_KEYWORDS_API_BASE)
+const biliEndpointUrl = ref(import.meta.env.VITE_BILIBILI_KEYWORDS_API_BASE) 
 const finalEndpointUrl = computed(() => platform.value === 'douyin' ? douyinEndpointUrl.value : biliEndpointUrl.value)
 const apiKey = ref(import.meta.env.VITE_API_KEY)
 const limit = ref(100)
-const inputMode = ref('ids') // 'ids' | 'names'
+const inputMode = ref('none') // 'none' | 'ids' | 'names'
 const authorIdsInput = ref('')
 const authorNamesInput = ref('')
+const keywordsInput = ref('')
+const blockedWordsInput = ref('')
 const startDate = ref('') // yyyy-MM-dd
 const endDate = ref('')   // yyyy-MM-dd
 const turbo = ref(false)
@@ -112,9 +155,11 @@ const fileImport = ref(null)
 
 const parsedAuthorIds = computed(() => parseList(authorIdsInput.value))
 const parsedAuthorNames = computed(() => parseList(authorNamesInput.value))
+const parsedKeywords = computed(() => parseList(keywordsInput.value))
+const parsedBlockedWords = computed(() => parseList(blockedWordsInput.value))
 
 // 页面中的表格数据
-const columns = computed(() => createAuthorColumns(platform.value))
+const columns = computed(() => createKeywordsColumns(platform.value))
 const pagination = {
   pageSize: 10
 };
@@ -206,13 +251,17 @@ function validateParams(isNextPage = false) {
     return ''
   }
 
-  if (inputMode.value === 'ids') {
-    if (parsedAuthorIds.value.length === 0) return '请至少填写一个用户ID'
-    if (parsedAuthorNames.value.length > 0) return '不可同时传入用户名称与用户ID'
-  } else {
-    if (parsedAuthorNames.value.length === 0) return '请至少填写一个用户名称'
-    if (parsedAuthorIds.value.length > 0) return '不可同时传入用户名称与用户ID'
+  if (inputMode.value !== 'none') {
+    if (inputMode.value === 'ids') {
+      if (parsedAuthorIds.value.length === 0) return '请至少填写一个用户ID'
+      if (parsedAuthorNames.value.length > 0) return '不可同时传入用户名称与用户ID'
+    } else {
+      if (parsedAuthorNames.value.length === 0) return '请至少填写一个用户名称'
+      if (parsedAuthorIds.value.length > 0) return '不可同时传入用户名称与用户ID'
+    }
   }
+  
+  if (keywordsInput.value.length === 0) return '请填写关键词'
 
   if (!startDate.value) return '请填写开始日期'
   if (!endDate.value) return '请填写结束日期'
@@ -225,6 +274,17 @@ function validateParams(isNextPage = false) {
   return ''
 }
 
+function dateToTimestamp(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const [hours, minutes, seconds] = [0, 0, 0]
+
+  const utcTime = Date.UTC(year, month - 1, day, hours, minutes, seconds)
+
+  const timeStamp = utcTime - 8 * 60 * 60 * 1000
+
+  return timeStamp  
+}
+
 function buildBody(isNextPage = false) {
   const query = {}
   if (inputMode.value === 'ids') {
@@ -233,8 +293,15 @@ function buildBody(isNextPage = false) {
     query.author_names = parsedAuthorNames.value
   }
   if (!isNextPage) {
-    query.start_date = startDate.value
-    query.end_date = endDate.value
+    query.start_date = dateToTimestamp(startDate.value)
+    query.end_date = dateToTimestamp(endDate.value)
+    query.keywords = parsedKeywords.value
+    query.blocked_words = parsedBlockedWords.value
+    query.sentiment = Number(sentiment.value)
+    query.post_type = postType.value
+    query.is_ad = Number(isAd.value)
+    query.sort = sort.value
+    query.sort_order = sortOrder.value
     query.turbo = !!turbo.value
     query.limit = Number(limit.value) || 100
   }
@@ -303,7 +370,7 @@ function resetAll() {
 }
 
 function downloadExcel() {
-  const headerMap = getAuthorHeaderMap(platform.value)
+  const headerMap = getKeywordsHeaderMap(platform.value)
   exportJsonToExcel(results.value, `${platform.value}_posts.xlsx`, 'Sheet1', undefined, headerMap)
 }
 </script>
